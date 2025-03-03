@@ -1,0 +1,4 @@
+# Executables
+*.exe
+*.o
+*.d
