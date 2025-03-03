@@ -144,11 +144,12 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     // 将顶点数组vertices缓冲到内存中
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW); // GL_STATIC_DRAW表示缓冲数据不会改变
-    // 如何解析顶点数据 ：0表示顶点数据的位置； 3表示顶点数据有三个值； 顶点的三个值是float；
-    //                 FALSE表示是否希望数据被标准化； 步长：顶点属性所占的大小； 数据起始位置的偏移量：0
+    // glVertexAttribPointer：如何解析顶点数据，设置顶点属性
+    // (1): 0表示顶点数据的位置(location = 0)；(2): 3表示顶点数据有三个值vec3； (3):顶点的三个值是float；
+    // (4): FALSE表示是否希望数据被标准化[-1,1]； (5):步长：顶点属性所占的大小； (6): 数据起始位置的偏移量：0
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(0); // 启用 location = 0 的顶点属性
-    // glBindVertexArray(0);         // 解绑 VAO，防止后续误修改
+    glEnableVertexAttribArray(0); // 启用 location = 0 的顶点属性(顶点属性默认禁用)
+    // glBindVertexArray(0); // 解绑 VAO，防止后续误修改
 
     // 4循环渲染
     while (!glfwWindowShouldClose(window)) // 窗口是否关闭
