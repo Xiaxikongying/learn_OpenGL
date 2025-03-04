@@ -19,8 +19,8 @@ const char *vertexShaderSource = "#version 330 core\n"
                                  "layout (location = 0) in vec3 aPos;\n"
                                  "void main()\n"
                                  "{\n"
-                                 "gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0f);"
-                                 "gl_PointSize = 10.0f;"
+                                 "gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0f);\n"
+                                 "gl_PointSize = 10.0f;\n"
                                  "}\n\0";
 // 片段着色器
 const char *fragmentShaderSource1 = "#version 330 core\n"
@@ -138,10 +138,10 @@ int main()
     glLinkProgram(shaderPrograms[0]);
     // 可以用下面代码检测着色器创建是否成功
     {
-        glGetShaderiv(shaderPrograms[0], GL_COMPILE_STATUS, &success);
+        glGetProgramiv(shaderPrograms[0], GL_LINK_STATUS, &success);
         if (!success)
         {
-            glGetShaderInfoLog(shaderPrograms[0], 512, NULL, infoLog);
+            glGetProgramInfoLog(shaderPrograms[0], 512, NULL, infoLog);
             cout << "ERROR::SHADER::shaderProgram::COMPILATION_FAILED\n"
                  << infoLog << endl;
         }
@@ -154,14 +154,15 @@ int main()
     glLinkProgram(shaderPrograms[1]);
     // 可以用下面代码检测着色器创建是否成功
     {
-        glGetShaderiv(shaderPrograms[1], GL_COMPILE_STATUS, &success);
+        glGetProgramiv(shaderPrograms[1], GL_LINK_STATUS, &success);
         if (!success)
         {
-            glGetShaderInfoLog(shaderPrograms[1], 512, NULL, infoLog);
+            glGetProgramInfoLog(shaderPrograms[1], 512, NULL, infoLog);
             cout << "ERROR::SHADER::shaderProgram::COMPILATION_FAILED\n"
                  << infoLog << endl;
         }
     }
+
     // 在glLinkProgram函数调用之后，每个着色器调用和渲染调用都会使用shaderProgram
     // 所以vertexShader和fragmentShader就可以删除了
     glDeleteShader(vertexShader);

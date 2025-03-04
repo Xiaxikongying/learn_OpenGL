@@ -19,8 +19,8 @@ const char *vertexShaderSource = "#version 330 core\n"
                                  "layout (location = 0) in vec3 aPos;\n"
                                  "void main()\n"
                                  "{\n"
-                                 "gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0f);"
-                                 "gl_PointSize = 20.0f;"
+                                 "gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0f);\n"
+                                 "gl_PointSize = 20.0f;\n"
                                  "}\n\0";
 // 片段着色器
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -114,10 +114,10 @@ int main()
     glLinkProgram(shaderProgram);
     // 可以用下面代码检测着色器创建是否成功
     {
-        glGetShaderiv(shaderProgram, GL_COMPILE_STATUS, &success);
+        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
         if (!success)
         {
-            glGetShaderInfoLog(shaderProgram, 512, NULL, infoLog);
+            glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
             cout << "ERROR::SHADER::shaderProgram::COMPILATION_FAILED\n"
                  << infoLog << endl;
         }
