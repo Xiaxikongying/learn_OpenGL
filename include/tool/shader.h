@@ -18,7 +18,6 @@ public:
     // 创建一个着色器，需要顶点着色器和片段着色器
     Shader(const char *vertexPath, const char *fragmentPath, const char *geometryPath = nullptr)
     {
-
         std::string vert_string = vertexPath;
         std::string frag_string = fragmentPath;
         std::string gemo_string = "";

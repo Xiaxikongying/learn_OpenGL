@@ -5,8 +5,6 @@
 #include <tool/shader.h>
 using namespace std;
 
-// 练习3： 创建两个着色器程序，让两个三角形颜色不同
-
 /// @brief 回调函数当用户改变窗口的大小的时候，视口也应该被调整
 /// @param window  窗口
 /// @param width_height 窗口改变后的大小
