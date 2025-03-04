@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <math.h>
+#include <tool/shader.h>
 using namespace std;
 
 // 练习3： 创建两个着色器程序，让两个三角形颜色不同
@@ -15,30 +16,13 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 /// @param window 检测的窗口
 void processInput(GLFWwindow *window);
 
-// 顶点着色器  这里姑且先使用字符串形式写
-const char *vertexShaderSource = "#version 330 core\n"
-                                 "layout (location = 0) in vec3 aPos;\n"
-                                 "layout (location = 1) in vec3 aColor;\n"
-                                 "uniform vec2 xyOffset;\n"
-                                 "out vec3 ourColor;\n"
-                                 "void main()\n"
-                                 "{\n"
-                                 "    gl_Position = vec4(aPos.x + xyOffset.x, aPos.y + xyOffset.y, aPos.z, 1.0f);\n"
-                                 "    ourColor = aColor;\n"
-                                 "    gl_PointSize = 10.0f;\n"
-                                 "}\n\0";
-// 片段着色器
-const char *fragmentShaderSource = "#version 330 core\n"
-                                   "out vec4 FragColor;\n"
-                                   "in vec3 ourColor;\n" // 必须名称类型都相同vec3 ourColor
-                                   "uniform vec3 colorOffset;\n"
-                                   "void main()\n"
-                                   "{\n"
-                                   "    FragColor = vec4((ourColor + colorOffset)/2, 1.0f);\n"
-                                   "}\n\0";
+string Shader::dirName;
 
-int main()
+int main(int agrc, char *argv[])
 {
+    Shader::dirName = argv[1];
+    Shader::dirName += "/";
+
     glfwInit();                                                    // 初始化GLFW ,它主要用于创建/管理窗口，处理用户输入等
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);                 // 主要版本
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);                 // 次要版本  即3.3版本的opengl
@@ -70,74 +54,11 @@ int main()
     // 注册窗口大小改变时的回调函数
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    int count;
-    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &count);
-    cout << "GL_MAX_VERTEX_ATTRIBS = " << count << endl;
-
     //-----上面是窗口初始化     -----
     //-----下面开始绘制图像的准备-----
 
-    // 2.1创建一个顶点着色器
-    unsigned int vertexShader;
-    vertexShader = glCreateShader(GL_VERTEX_SHADER); // 返回顶点着色器的索引（id）
-    // 附加着色器源码
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL); // 参数为：着色器id，字符串数量，着色器代码，
-    // 编译着色器
-    glCompileShader(vertexShader);
-    int success;
-    char infoLog[512];
-    // 可以用下面代码检测着色器创建是否成功
-    {
-        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-        if (!success)
-        {
-            glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-            cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n"
-                 << infoLog << endl;
-        }
-    }
-
-    // 2.2 创建片段着色器
-    // 总体与顶点着色器类型
-    unsigned int fragmentShader;
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER); // 返回片段着色器的索引（id）
-    // 附加着色器源码
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    // 编译着色器
-    glCompileShader(fragmentShader);
-    // 可以用下面代码检测着色器创建是否成功
-    {
-        glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-        if (!success)
-        {
-            glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-            cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n"
-                 << infoLog << endl;
-        }
-    }
-
-    // 2.3着色器程序 将多个着色器合并
-    unsigned int shaderProgram;
-    shaderProgram = glCreateProgram(); // 创建着色器程序
-    // 合并顶点、片段着色器
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    // 可以用下面代码检测着色器创建是否成功
-    {
-        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-        if (!success)
-        {
-            glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-            cout << "ERROR::SHADER::shaderProgram::COMPILATION_FAILED\n"
-                 << infoLog << endl;
-        }
-    }
-
-    // 在glLinkProgram函数调用之后，每个着色器调用和渲染调用都会使用shaderProgram
-    // 所以vertexShader和fragmentShader就可以删除了
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
+    // 2 创建顶点/片段着色器  创建着色器程序
+    Shader ourShader("./shader/vertex.glsl", "./shader/fragment.glsl");
 
     // 3顶点数据
     float vertices[] = {
@@ -180,19 +101,15 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT); // 改变背景颜色
 
         // 绘制第一个三角形
-        glUseProgram(shaderProgram);
+        ourShader.use();
         glBindVertexArray(VAO);
         // 设置fragment2的uniform
         float timeValue = glfwGetTime(); // 获取时间
         float Value1 = sin(timeValue) / 2;
         float Value2 = cos(timeValue) / 2;
-        float Value3 = tan(timeValue) / 2;
-        int xyOffsetLocation = glGetUniformLocation(shaderProgram, "xyOffset"); // 获取uniform vec2 xyOffset的地址
-        // 更新一个uniform之前你必须先使用程序（调用glUseProgram)，查询uniform地址不要求
-        glUniform2f(xyOffsetLocation, Value1, Value2);
 
-        int colorOffsetLocation = glGetUniformLocation(shaderProgram, "colorOffset");
-        glUniform3f(colorOffsetLocation, abs(Value1) * 2, abs(Value2) * 2, abs(Value1) + abs(Value2));
+        ourShader.setVec2("xyOffset", Value1, Value1);
+        ourShader.setVec3("colorOffset", abs(Value1) * 2, abs(Value2) * 2, abs(Value1) + abs(Value2));
 
         glDrawArrays(GL_TRIANGLES, 0, 3); // 绘制三角形
         glDrawArrays(GL_POINTS, 0, 3);
@@ -205,7 +122,6 @@ int main()
     // 资源释放
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    glDeleteProgram(shaderProgram);
 
     glfwTerminate(); // 关闭glfw
     return 0;

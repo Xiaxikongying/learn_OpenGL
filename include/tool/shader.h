@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <direct.h>
 
 class Shader
 {
@@ -103,7 +104,7 @@ public:
             glAttachShader(ID, geometry);
         glLinkProgram(ID);
         checkCompileErrors(ID, "PROGRAM");
-        // 删除着色器
+        //  删除着色器
         glDeleteShader(vertex);
         glDeleteShader(fragment);
         if (geometryPath != nullptr)
@@ -200,5 +201,4 @@ private:
         }
     }
 };
-
 #endif
