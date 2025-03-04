@@ -4,6 +4,7 @@
 #include <math.h>
 #include <tool/shader.h>
 using namespace std;
+// 练习3：使用out关键字把顶点位置输出到片段着色器，并将片段的颜色设置为与顶点位置相等
 
 /// @brief 回调函数当用户改变窗口的大小的时候，视口也应该被调整
 /// @param window  窗口
@@ -56,7 +57,7 @@ int main(int agrc, char *argv[])
     //-----下面开始绘制图像的准备-----
 
     // 2 创建顶点/片段着色器  创建着色器程序
-    Shader ourShader("./shader/vertex.glsl", "./shader/fragment.glsl");
+    Shader ourShader("./shader/vertex_test3.glsl", "./shader/fragment_test3.glsl");
     // 3顶点数据
     float vertices[] = {
         // 位置              // 颜色
