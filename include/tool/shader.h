@@ -167,6 +167,11 @@ public:
     }
     void setMat4(const std::string &name, const glm::mat4 &mat) const
     {
+        // glUniformMatrix4fv
+        // 第一个参数的着色器的id
+        // 第二个参数是要传递几个矩阵
+        // 第三个参数是是否要对矩阵进行转置
+        // 第四个参数是矩阵的地址
         glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, &mat[0][0]);
     }
 
