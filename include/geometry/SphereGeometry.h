@@ -10,7 +10,7 @@ using namespace std;
 class SphereGeometry : public BufferGeometry
 {
 public:
-    SphereGeometry(float radius = 1.0f, float widthSegments = 8.0f, float heightSegments = 6.0f, float phiStart = 0.0f, float phiLength = PI * 2.0f, float thetaStart = 0.0f, float thetaLength = PI)
+    SphereGeometry(float radius = 1.0f, float widthSegments = 30.0f, float heightSegments = 30.0f, float phiStart = 0.0f, float phiLength = PI * 2.0f, float thetaStart = 0.0f, float thetaLength = PI)
     {
 
         const float thetaEnd = glm::min(thetaStart + thetaLength, PI);
