@@ -86,9 +86,11 @@ int main(int agrc, char *argv[])
     glm::vec3 clearColor = glm::vec3(0.2f, 0.3f, 0.5f);  // 背景颜色
     glm::vec3 cubeColor = glm::vec3(0.6f, 0.8f, 0.2f);   // 正方形颜色
     glm::vec3 sphereColor = glm::vec3(0.8f, 0.2f, 0.5f); // 球颜色
-    glm::vec3 lightPos = glm::vec3(3.0f, 3.0f, 1.0f);    // 光源位置
-    glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);  // 光源颜色
 
+    glm::vec3 lightPos = glm::vec3(3.0f, 3.0f, 1.0f);   // 光源位置
+    glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f); // 光源颜色
+
+    ourShader.use();
     // 传递材质属性
     ourShader.setVec3("material.ambient", 1.0f, 0.5f, 0.31f);
     ourShader.setVec3("material.diffuse", 1.0f, 0.5f, 0.31f);
@@ -155,11 +157,11 @@ int main(int agrc, char *argv[])
         ourShader.setVec3("viewPos", camera.Position);
         ourShader.setVec3("light.position", lightPos);
 
-        glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f);
-        glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f);
+        // glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f);
+        // glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f);
 
-        ourShader.setVec3("material.ambient", ambientColor);
-        ourShader.setVec3("material.diffuse", diffuseColor);
+        // ourShader.setVec3("material.ambient", ambientColor);
+        // ourShader.setVec3("material.diffuse", diffuseColor);
 
         // 绘制立方体
         model = glm::translate(model, glm::vec3(-1.0f, 0.0f, 0.0f));
@@ -185,7 +187,6 @@ int main(int agrc, char *argv[])
         lightShader.setMat4("view", view);
         lightShader.setMat4("projection", projection);
         lightShader.setVec3("lightColor", lightColor);
-
         glBindVertexArray(light.VAO);
         glDrawElements(GL_TRIANGLES, light.indices.size(), GL_UNSIGNED_INT, 0);
 
