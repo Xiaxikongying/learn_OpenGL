@@ -22,7 +22,7 @@ void main()
     vec3 norm = normalize(outNormal);
     vec3 lightDir = normalize(lightPos - outFragPos); //光源方向
     float diff = max(dot(norm, lightDir), 0.0);     //入射光 与 法线 的夹角
-    vec3 diffuse = diff * lightColor;
+    vec3 diffuse = diffuseStrength * diff * lightColor;
 
     //镜面反射光：specular
     vec3 viewDir = normalize(viewPos - outFragPos); //观测方向
