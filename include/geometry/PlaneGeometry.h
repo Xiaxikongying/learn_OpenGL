@@ -13,7 +13,7 @@ public:
     /// @brief 用于生成一个平面几何体
     /// @param width_height  平面几何体的宽高
     /// @param wSegment_hSegment 平面在水平/垂直方向的分段数（即用几个顶点表示水平/垂直方向）
-    PlaneGeometry(float width = 1.0, float height = 1.0, float wSegment = 1.0, float hSegment = 1.0)
+    PlaneGeometry(float width = 1.0, float height = 1.0, float wSegment = 30.0, float hSegment = 30.0)
     {
 
         // 获得平面的中心点(width_half，height_half)

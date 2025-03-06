@@ -15,7 +15,7 @@ public:
     float widthSegments;
     float heightSegments;
     float depthSegments;
-    BoxGeometry(float width = 1.0f, float height = 1.0f, float depth = 1.0, float widthSegments = 1.0f, float heightSegments = 1.0f, float depthSegments = 1.0f)
+    BoxGeometry(float width = 1.0f, float height = 1.0f, float depth = 1.0, float widthSegments = 30.0f, float heightSegments = 30.0f, float depthSegments = 30.0f)
     {
 
         widthSegments = glm::floor(widthSegments);
