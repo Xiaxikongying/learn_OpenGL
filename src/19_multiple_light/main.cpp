@@ -71,6 +71,7 @@ int main(int agrc, char *argv[])
     glEnable(GL_BLEND);                                // 启用颜色混合
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // 设定混合模式，实现 基于 alpha 透明度的颜色混合
     glEnable(GL_DEPTH_TEST);                           // 开启深度测试
+    glDepthFunc(GL_LESS);
 
     // 注册回调函数
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);

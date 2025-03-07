@@ -7,7 +7,7 @@
 CXX = g++
 
 # define any compile-time flags
-CXXFLAGS	:= -std=c++17 -Wall -Wextra -g
+CXXFLAGS	:= -std=c++17 -w -g
 
 # define library paths in addition to /usr/lib
 #   if I wanted to include libraries not in /usr/lib I'd specify
@@ -27,8 +27,7 @@ INCLUDE	:= include
 # define lib directory
 LIB		:= lib
 
-ifeq ($(OS),Windows_NT)
-LIBRARIES	:= -lglad -lglfw3dll
+LIBRARIES	:= -lglad -lglfw3dll -llibassimp
 MAIN	:= main.exe
 SOURCEDIRS	:= $(SRC)
 INCLUDEDIRS	:= $(INCLUDE)
@@ -36,16 +35,6 @@ LIBDIRS		:= $(LIB)
 FIXPATH = $(subst /,/,$1)
 RM			:= del /q a/f
 MD	:= mkdir
-else
-LIBRARIES	:= -lglad -lglfw -ldl -lpthread
-MAIN	:= main
-SOURCEDIRS	:= $(shell find $(SRC) -type d)
-INCLUDEDIRS	:= $(shell find $(INCLUDE) -type d)
-LIBDIRS		:= $(shell find $(LIB) -type d)
-FIXPATH = $1
-RM = rm -f
-MD	:= mkdir -p
-endif
 
 # define any directories containing header files other than /usr/include
 INCLUDES	:= $(patsubst %,-I%, $(INCLUDEDIRS:%/=%))
@@ -94,3 +83,5 @@ clean:
 run: all
 	./$(OUTPUTMAIN) src/$(dir)/
 	@echo Executing 'run: all' complete!
+
+

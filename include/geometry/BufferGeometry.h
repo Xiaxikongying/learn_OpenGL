@@ -15,7 +15,6 @@
 using namespace std;
 
 const float PI = glm::pi<float>();
-
 // mesh.h中也定义此属性
 struct Vertex
 {
