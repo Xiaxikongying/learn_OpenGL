@@ -64,5 +64,6 @@
         "filesystem": "cpp",
         "forward_list": "cpp",
         "ratio": "cpp"
-    }
+    },
+    "cmake.ignoreCMakeListsMissing": true
 }

@@ -19,6 +19,9 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void mouse_button_calback(GLFWwindow *window, int button, int action, int mods);
 void scroll_callback(GLFWwindow *window, double x, double y);
 
+// 加载贴图
+unsigned int loadTexture(char const *path);
+
 string Shader::dirName;
 
 int SCREEN_WIDTH = 1200;
@@ -74,61 +77,85 @@ int main(int agrc, char *argv[])
     glfwSetScrollCallback(window, scroll_callback);
 
     // 生成着色器
-    Shader ourShader("./shader/vertex.glsl", "./shader/fragment.glsl");
+    Shader ourShader("./shader/direction/dir_vertex.glsl", "./shader/direction/dir_fragment.glsl");
     Shader lightShader("./shader/light_vert.glsl", "./shader/light_frag.glsl");
 
     BoxGeometry boxGeometry(1.0f, 1.0f, 1.0f);
-    SphereGeometry sphereGeometry(0.75f);
+    // SphereGeometry sphereGeometry(0.75f);
     SphereGeometry light(0.2f); // 光源
 
     float value = 0; // 时间值
     float aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
     glm::vec3 clearColor = glm::vec3(0.2f, 0.3f, 0.5f);  // 背景颜色
-    glm::vec3 cubeColor = glm::vec3(0.6f, 0.8f, 0.2f);   // 正方形颜色
+    glm::vec3 cubeColor = glm::vec3(1.0f, 1.0f, 1.0f);   // 正方形颜色
     glm::vec3 sphereColor = glm::vec3(0.8f, 0.2f, 0.5f); // 球颜色
 
-    glm::vec3 lightPos = glm::vec3(3.0f, 3.0f, 1.0f);   // 光源位置
+    glm::vec3 lightPos = glm::vec3(2.0f, 1.0f, 3.0f);   // 光源位置
     glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f); // 光源颜色
+
+    // 加载漫反射 镜面反射贴图
+    unsigned int diffuseMap = loadTexture("./static/texture/container2.png");
+    unsigned int specularMap = loadTexture("./static/texture/container2_specular.png");
+
+    // 激活使用两张贴图
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, diffuseMap);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, specularMap);
 
     ourShader.use();
     // 传递材质属性
-    ourShader.setVec3("material.ambient", 1.0f, 0.5f, 0.31f);
-    ourShader.setVec3("material.diffuse", 1.0f, 0.5f, 0.31f);
-    ourShader.setVec3("material.specular", 0.5f, 0.5f, 0.5f);
+    ourShader.setInt("material.diffuse", 0);
+    ourShader.setInt("material.specular", 1);
     ourShader.setFloat("material.shininess", 32.0f);
 
     // 设置光照属性
-    ourShader.setVec3("light.ambient", 0.2f, 0.2f, 0.2f);
-    ourShader.setVec3("light.diffuse", 0.5f, 0.5f, 0.5f);
+    ourShader.setVec3("light.ambient", 0.5f, 0.5f, 0.5f);
+    ourShader.setVec3("light.diffuse", 0.8f, 0.8f, 0.8f);
     ourShader.setVec3("light.specular", 1.0f, 1.0f, 1.0f);
-    ourShader.setVec3("light.position", lightPos);
+    ourShader.setVec3("light.direction", lightPos);
+
+    glm::vec3 cubePositions[] = {
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(2.0f, 5.0f, -15.0f),
+        glm::vec3(-1.5f, -2.2f, -2.5f),
+        glm::vec3(-3.8f, -2.0f, -12.3f),
+        glm::vec3(2.4f, -0.4f, -3.5f),
+        glm::vec3(-1.7f, 3.0f, -7.5f),
+        glm::vec3(1.3f, -2.0f, -2.5f),
+        glm::vec3(1.5f, 2.0f, -2.5f),
+        glm::vec3(1.5f, 0.2f, -1.5f),
+        glm::vec3(-1.3f, 1.0f, -1.5f)};
 
     // 循环渲染
     while (!glfwWindowShouldClose(window)) // 窗口是否关闭
     {
         processInput(window); // 检测是否有输入
-        // 创建imgui窗口
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
 
-        // 设置渲染内容
-        ImGui::Begin("Camera");
-        // 显示帧率
-        ImGui::Text("%.3f ms-fram (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-        // 显示滑动条
-        ImGui::SliderFloat("fov", &camera.Zoom, 1.0f, 60.0f);
-        ImGui::SliderFloat("mouseSensitivity", &camera.MouseSensitivity, 0.01f, 0.5f);
-        ImGui::SliderFloat("view.x", &camera.Position.x, -30.0f, 30.0f); // 范围
-        ImGui::SliderFloat("view.y", &camera.Position.y, -30.0f, 30.0f);
-        ImGui::SliderFloat("view.z", &camera.Position.z, -30.0f, 30.0f);
-        ImGui::End();
+        {
+            // 创建imgui窗口
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
 
-        ImGui::Begin("Lighting");
-        ImGui::ColorEdit3("cubeColor", (float *)&cubeColor);
-        ImGui::ColorEdit3("sphereColor", (float *)&sphereColor);
-        ImGui::ColorEdit3("lightColor", (float *)&lightColor);
-        ImGui::End();
+            // 设置渲染内容
+            ImGui::Begin("Camera");
+            // 显示帧率
+            ImGui::Text("%.3f ms-fram (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+            // 显示滑动条
+            ImGui::SliderFloat("fov", &camera.Zoom, 1.0f, 60.0f);
+            ImGui::SliderFloat("mouseSensitivity", &camera.MouseSensitivity, 0.01f, 0.5f);
+            ImGui::SliderFloat("view.x", &camera.Position.x, -30.0f, 30.0f); // 范围
+            ImGui::SliderFloat("view.y", &camera.Position.y, -30.0f, 30.0f);
+            ImGui::SliderFloat("view.z", &camera.Position.z, -30.0f, 30.0f);
+            ImGui::End();
+
+            ImGui::Begin("Lighting");
+            ImGui::ColorEdit3("cubeColor", (float *)&cubeColor);
+            ImGui::ColorEdit3("sphereColor", (float *)&sphereColor);
+            ImGui::ColorEdit3("lightColor", (float *)&lightColor);
+            ImGui::End();
+        }
 
         // 渲染指令 ....
         glClearColor(clearColor.x, clearColor.y, clearColor.z, 1.0f);
@@ -147,37 +174,36 @@ int main(int agrc, char *argv[])
         glm::mat4 projection = glm::mat4(1.0f);
         projection = glm::perspective(glm::radians(camera.Zoom), aspect, 0.1f, 100.0f);
 
-        lightPos.x = sin(value) * 2;
-        lightPos.y = cos(value) * 2;
+        // lightPos.x = sin(value) * 2;
+        // lightPos.y = cos(value) * 2;
 
         // 物体着色器
         ourShader.use();
         ourShader.setMat4("view", view);
         ourShader.setMat4("projection", projection);
         ourShader.setVec3("viewPos", camera.Position);
-        ourShader.setVec3("light.position", lightPos);
-
-        glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f);
-        glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f);
-
-        ourShader.setVec3("material.ambient", ambientColor);
-        ourShader.setVec3("material.diffuse", diffuseColor);
+        ourShader.setVec3("objectColor", cubeColor);
 
         // 绘制立方体
-        model = glm::translate(model, glm::vec3(-1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, value, glm::vec3(value, value, value));
-        ourShader.setMat4("model", model);
-        ourShader.setVec3("objectColor", cubeColor);
-        glBindVertexArray(boxGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, boxGeometry.indices.size(), GL_UNSIGNED_INT, 0);
-
-        // 绘制球体
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(1.0f, 0.0f, 0.0f));
-        ourShader.setMat4("model", model);
-        ourShader.setVec3("objectColor", sphereColor);
-        glBindVertexArray(sphereGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, sphereGeometry.indices.size(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(boxGeometry.VAO);
+        for (int i = 0; i < 10; ++i)
+        {
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, cubePositions[i]);
+            if (i % 3 == 0)
+                model = glm::rotate(model, value * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
+            ourShader.setMat4("model", model);
+            glDrawElements(GL_TRIANGLES, boxGeometry.indices.size(), GL_UNSIGNED_INT, 0);
+        }
+
+        // // 绘制球体
+        // model = glm::mat4(1.0f);
+        // model = glm::translate(model, glm::vec3(1.0f, 0.0f, 0.0f));
+        // ourShader.setMat4("model", model);
+        // ourShader.setVec3("objectColor", sphereColor);
+        // glBindVertexArray(sphereGeometry.VAO);
+        // glDrawElements(GL_TRIANGLES, sphereGeometry.indices.size(), GL_UNSIGNED_INT, 0);
 
         // 光源着色器
         lightShader.use();
@@ -198,7 +224,7 @@ int main(int agrc, char *argv[])
         glfwPollEvents();        // 检测是否有事件
     }
     boxGeometry.dispose();
-    sphereGeometry.dispose();
+    // sphereGeometry.dispose();
     light.dispose();
     glfwTerminate(); // 关闭glfw
     return 0;
@@ -277,4 +303,42 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     if (camera.Zoom > 60.0f)
         camera.Zoom = 60.0f;
     return;
+}
+
+// 加载纹理贴图
+unsigned int loadTexture(char const *path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+    if (data)
+    {
+        GLenum format;
+        if (nrComponents == 1)
+            format = GL_RED;
+        else if (nrComponents == 3)
+            format = GL_RGB;
+        else if (nrComponents == 4)
+            format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
 }

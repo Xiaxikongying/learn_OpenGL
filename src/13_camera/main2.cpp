@@ -219,7 +219,6 @@ int main(int agrc, char *argv[])
             if (i % 3 == 0)
                 model = glm::rotate(model, value * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
             ourShader.setMat4("model", model);
-
             glDrawElements(GL_TRIANGLES, boxGeometry.indices.size(), GL_UNSIGNED_INT, 0);
         }
 
