@@ -52,14 +52,17 @@ int main(int argc, char *argv[])
     // 设置视口
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     glEnable(GL_PROGRAM_POINT_SIZE);
-
     // 混合
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // 源因子  目标因子
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // 深度测试
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
+
+    // 启用面剔除
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
 
     // 鼠标键盘事件
     // 1.注册窗口变化监听

@@ -52,14 +52,17 @@ int main(int argc, char *argv[])
     // 设置视口
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     glEnable(GL_PROGRAM_POINT_SIZE);
-
     // 混合
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // 源因子  目标因子
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // 深度测试
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
+
+    // 启用面剔除
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
 
     // 鼠标键盘事件
     // 1.注册窗口变化监听
@@ -69,11 +72,13 @@ int main(int argc, char *argv[])
 
     Shader sceneShader("./shader/scene_vert.glsl", "./shader/scene_frag.glsl");
     Shader lightObjectShader("./shader/light_vert.glsl", "./shader/light_frag.glsl");
+    Shader frameBufferShader("./shader/frame_buffer_quad_vert.glsl", "./shader/frame_buffer_quad_frag.glsl");
 
     PlaneGeometry groundGeometry(10.0, 10.0);            // 地面
     PlaneGeometry blendGeometry(1.0, 1.0);               // 透明物体
     BoxGeometry boxGeometry(1.0, 1.0, 1.0);              // 盒子
     SphereGeometry pointLightGeometry(0.04, 10.0, 10.0); // 点光源位置显示
+    PlaneGeometry frameGeometry(2.0, 2.0);               // 窗口平面
 
     unsigned int woodMap = loadTexture("./static/texture/wood.png");                         // 地面贴图
     unsigned int brickMap = loadTexture("./static/texture/brick_diffuse.jpg");               // 砖块贴图
@@ -117,6 +122,41 @@ int main(int argc, char *argv[])
         glm::vec3(-0.3f, 0.5f, -2.3f),
         glm::vec3(0.5f, 0.5f, -0.6f)};
 
+    //---------帧缓冲--------------------------------
+    frameBufferShader.use();
+    frameBufferShader.setInt("screenTexture", 0);
+    // 1.创建帧缓冲
+    unsigned int framebuffer;
+    glGenFramebuffers(1, &framebuffer);             // 创建帧缓冲
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer); // 绑定帧缓冲
+
+    // 2.创建纹理
+    unsigned int texColorBuffer;
+    glGenTextures(1, &texColorBuffer); // 生成纹理  但没有添加图片数据
+    glBindTexture(GL_TEXTURE_2D, texColorBuffer);
+    // 纹理的大小为整个屏幕的大小---->让当前屏幕使用一张纹理
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // 3.将颜色纹理附加到当前绑定的帧缓冲对象
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texColorBuffer, 0);
+
+    // 4.创建渲染缓冲
+    unsigned int renderBuffer;
+    glGenRenderbuffers(1, &renderBuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, renderBuffer);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    // 5.将 渲染缓冲对象 附加到 帧缓冲的 深度和模板附件上
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, renderBuffer);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        std::cout << "ERROR:Framebuffer is not complete!" << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     while (!glfwWindowShouldClose(window))
     {
         processInput(window);
@@ -126,6 +166,9 @@ int main(int argc, char *argv[])
         lastTime = currentFrame;
 
         // 渲染指令
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glEnable(GL_DEPTH_TEST);
+
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
@@ -192,7 +235,6 @@ int main(int argc, char *argv[])
 
         // 绘制灯光物体
         // ************************************************************
-
         float radius = 5.0f;
         float camX = sin(glfwGetTime() * 0.5) * radius;
         float camZ = cos(glfwGetTime() * 0.5) * radius;
@@ -239,6 +281,16 @@ int main(int argc, char *argv[])
             glBindVertexArray(pointLightGeometry.VAO);
             glDrawElements(GL_TRIANGLES, pointLightGeometry.indices.size(), GL_UNSIGNED_INT, 0);
         }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0); // 返回默认的帧缓冲对象
+        glDisable(GL_DEPTH_TEST);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        // 绘制创建的帧缓冲屏幕窗口
+        frameBufferShader.use();
+        glBindVertexArray(frameGeometry.VAO);
+        glBindTexture(GL_TEXTURE_2D, texColorBuffer);
+        glDrawElements(GL_TRIANGLES, frameGeometry.indices.size(), GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
