@@ -77,11 +77,7 @@ void main() {
     result += CalcPointLight(pointLights[i], normal, outFragPos, viewDir);
   }
 
-  result *= texture(Texture, outTexCoord).rgb;
-  
-  //           渲染颜色       边框颜色         模板测试值    
-  result = mix(result, vec3(0.0f, 0.0f, 1.0f), stenci);
-  FragColor = vec4(result, 1.0);
+  FragColor = vec4(result, 1.0) * texture(Texture, outTexCoord); //加上透明度的计算
 }
 
 // 计算定向光

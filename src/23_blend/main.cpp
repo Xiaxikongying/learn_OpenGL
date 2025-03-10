@@ -12,6 +12,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <tool/stb_image.h>
 #include <tool/gui.h>
+#include <map>
 using namespace std;
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
@@ -48,19 +49,6 @@ int main(int argc, char *argv[])
     glfwMakeContextCurrent(window);
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 
-    // -----------------------
-    // 创建imgui上下文
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    (void)io;
-    // 设置样式
-    ImGui::StyleColorsDark();
-    // 设置平台和渲染器
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(glsl_version);
-
-    // -----------------------
-
     // 设置视口
     glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     glEnable(GL_PROGRAM_POINT_SIZE);
@@ -71,10 +59,9 @@ int main(int argc, char *argv[])
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    // 模板测试
-    glEnable(GL_STENCIL_TEST);
-    glStencilFunc(GL_NOTEQUAL, 1, 0xff); // 绘制模板缓冲不等于1的
-    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    // 混合
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // 设置源因子和目标因子
 
     // 鼠标键盘事件
     // 1.注册窗口变化监听
@@ -85,38 +72,33 @@ int main(int argc, char *argv[])
     Shader sceneShader("./shader/scene_vert.glsl", "./shader/scene_frag.glsl");
     Shader lightObjectShader("./shader/light_vert.glsl", "./shader/light_frag.glsl");
 
-    PlaneGeometry planeGeometry(10.0, 10.0, 10.0, 10.0);
-    BoxGeometry boxGeometry(1.0, 1.0, 1.0);
-    SphereGeometry sphereGeometry(0.04, 10.0, 10.0);
-    SphereGeometry sphereGeometry2(0.5, 50.0, 50.0);
+    PlaneGeometry groundGeometry(10.0, 10.0);            // 地面
+    PlaneGeometry blendGeometry(1.0, 1.0);               // 透明物体
+    BoxGeometry boxGeometry(1.0, 1.0, 1.0);              // 盒子
+    SphereGeometry pointLightGeometry(0.04, 10.0, 10.0); // 点光源位置显示
 
-    unsigned int woodMap = loadTexture("./static/texture/wood.png");           // 地面贴图
-    unsigned int brickMap = loadTexture("./static/texture/brick_diffuse.jpg"); // 砖块贴图
-
-    sceneShader.use();
-    sceneShader.setInt("Texture", 0); // 使用0号贴图
+    unsigned int woodMap = loadTexture("./static/texture/wood.png");                         // 地面贴图
+    unsigned int brickMap = loadTexture("./static/texture/brick_diffuse.jpg");               // 砖块贴图
+    unsigned int blendMap = loadTexture("./static/texture/blending_transparent_window.png"); // 透明物体贴图
 
     float factor = 0.0;
-
     glm::vec3 view_translate = glm::vec3(0.0, 0.0, -5.0);
     ImVec4 clear_color = ImVec4(25.0 / 255.0, 25.0 / 255.0, 25.0 / 255.0, 1.0); // 25, 25, 25
+    glm::vec3 lightPosition = glm::vec3(1.0, 2.5, 2.0);                         // 光照位置
 
-    glm::vec3 lightPosition = glm::vec3(1.0, 2.5, 2.0); // 光照位置
-
+    sceneShader.use();
+    sceneShader.setInt("Texture", 0);
     // 传递材质属性
     sceneShader.setVec3("material.ambient", 1.0f, 0.5f, 0.31f);
     sceneShader.setFloat("material.shininess", 32.0f);
-
     // 设置平行光光照属性
     sceneShader.setVec3("directionLight.ambient", 0.01f, 0.01f, 0.01f);
     sceneShader.setVec3("directionLight.diffuse", 0.2f, 0.2f, 0.2f); // 将光照调暗了一些以搭配场景
     sceneShader.setVec3("directionLight.specular", 1.0f, 1.0f, 1.0f);
-
     // 设置衰减
     sceneShader.setFloat("light.constant", 1.0f);
     sceneShader.setFloat("light.linear", 0.09f);
     sceneShader.setFloat("light.quadratic", 0.032f);
-
     // 点光源的位置
     glm::vec3 pointLightPositions[] = {
         glm::vec3(0.7f, 1.0f, 1.5f),
@@ -129,6 +111,13 @@ int main(int argc, char *argv[])
         glm::vec3(1.0f, 0.0f, 1.0f),
         glm::vec3(0.0f, 0.0f, 1.0f),
         glm::vec3(0.0f, 1.0f, 0.0f)};
+    // 透明物体的
+    vector<glm::vec3> blendPositions{
+        glm::vec3(-1.5f, 0.5f, -0.48f),
+        glm::vec3(1.5f, 0.5f, 0.51f),
+        glm::vec3(0.0f, 0.5f, 0.7f),
+        glm::vec3(-0.3f, 0.5f, -2.3f),
+        glm::vec3(0.5f, 0.5f, -0.6f)};
 
     while (!glfwWindowShouldClose(window))
     {
@@ -138,20 +127,6 @@ int main(int argc, char *argv[])
         deltaTime = currentFrame - lastTime;
         lastTime = currentFrame;
 
-        // 在标题中显示帧率信息
-        // *************************************************************************
-        int fps_value = (int)round(ImGui::GetIO().Framerate);
-        int ms_value = (int)round(1000.0f / ImGui::GetIO().Framerate);
-
-        std::string FPS = std::to_string(fps_value);
-        std::string ms = std::to_string(ms_value);
-        std::string newTitle = "LearnOpenGL - " + ms + " ms/frame " + FPS;
-        glfwSetWindowTitle(window, newTitle.c_str());
-
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
         // 渲染指令
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -159,55 +134,26 @@ int main(int argc, char *argv[])
         sceneShader.use();
         factor = glfwGetTime();
 
+        // 启用woodMap贴图
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, woodMap);
-
-        float radius = 5.0f;
-        float camX = sin(glfwGetTime() * 0.5) * radius;
-        float camZ = cos(glfwGetTime() * 0.5) * radius;
 
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = glm::mat4(1.0f);
         projection = glm::perspective(glm::radians(camera.Zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
-        glm::vec3 lightPos = glm::vec3(lightPosition.x * glm::sin(glfwGetTime()) * 2.0, lightPosition.y, lightPosition.z);
         sceneShader.use();
         sceneShader.setMat4("view", view);
         sceneShader.setMat4("projection", projection);
 
-        sceneShader.setVec3("directionLight.direction", lightPos); // 光源位置
-        sceneShader.setVec3("viewPos", camera.Position);
-        pointLightPositions[0].z = camZ;
-        pointLightPositions[0].x = camX;
-
-        for (unsigned int i = 0; i < 4; i++)
-        {
-            // 设置点光源属性
-            sceneShader.setVec3("pointLights[" + std::to_string(i) + "].position", pointLightPositions[i]);
-            sceneShader.setVec3("pointLights[" + std::to_string(i) + "].ambient", 0.01f, 0.01f, 0.01f);
-            sceneShader.setVec3("pointLights[" + std::to_string(i) + "].diffuse", pointLightColors[i]);
-            sceneShader.setVec3("pointLights[" + std::to_string(i) + "].specular", 1.0f, 1.0f, 1.0f);
-
-            // // 设置衰减
-            sceneShader.setFloat("pointLights[" + std::to_string(i) + "].constant", 1.0f);
-            sceneShader.setFloat("pointLights[" + std::to_string(i) + "].linear", 0.09f);
-            sceneShader.setFloat("pointLights[" + std::to_string(i) + "].quadratic", 0.032f);
-        }
-
+        // 正常绘制地板
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0, 0.0, 0.0));
-
+        sceneShader.setFloat("uvScale", 4.0f);
         sceneShader.setMat4("model", model);
-
-        // 正常绘制地板
-        glStencilMask(0x00); // 禁止写入模板缓冲
-        glBindVertexArray(planeGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, planeGeometry.indices.size(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(groundGeometry.VAO);
+        glDrawElements(GL_TRIANGLES, groundGeometry.indices.size(), GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
-
-        // 1.正常绘制对象写入模板缓冲区
-        glStencilFunc(GL_ALWAYS, 1, 0xff); // 全部绘制都会通过模板测试  成功绘制会写入ref(第二个参数)
-        glStencilMask(0xff);               // 启用写入模板缓冲
 
         // 绘制2个正方体砖块
         glBindTexture(GL_TEXTURE_2D, brickMap);
@@ -223,38 +169,54 @@ int main(int argc, char *argv[])
         sceneShader.setMat4("model", model);
         glBindVertexArray(boxGeometry.VAO);
         glDrawElements(GL_TRIANGLES, boxGeometry.indices.size(), GL_UNSIGNED_INT, 0);
-
-        // 2.绘制边框，  禁用模板写入和深度测试
-        glStencilFunc(GL_NOTEQUAL, 1, 0xff); // 模板值不等于1的才会通过测试
-        glStencilMask(0x00);                 // 禁止写入模板缓冲  即模板缓冲为0
-        glDisable(GL_DEPTH_TEST);
-
-        sceneShader.setFloat("stenci", 1.0);
-        float scale = 1.03; // 比原版正方体稍大一点
-        // 第一个边框
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(1.0, 1.0, -1.0)); // translate和scale与上面一致
-        model = glm::scale(model, glm::vec3(2.0 * scale, 2.0 * scale, 2.0 * scale));
-        sceneShader.setMat4("model", model);
-        glBindVertexArray(boxGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, boxGeometry.indices.size(), GL_UNSIGNED_INT, 0);
-
-        // 第二个边框
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(-1.0, 0.5, 2.0));
-        model = glm::scale(model, glm::vec3(scale, scale, scale));
-        sceneShader.setMat4("model", model);
-        glBindVertexArray(boxGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, boxGeometry.indices.size(), GL_UNSIGNED_INT, 0);
-
         glBindVertexArray(0);
-        glStencilMask(0xff); // 启用写入模板缓冲
-        glStencilFunc(GL_ALWAYS, 0, 0xff);
-        glEnable(GL_DEPTH_TEST);
-        sceneShader.setFloat("stenci", 0.0); // 绘制完成边框   将模板值社回为0
+
+        // 绘制透明物体
+        // ----------------------------------------------------------
+        glBindVertexArray(blendGeometry.VAO);
+        glBindTexture(GL_TEXTURE_2D, blendMap);
+        // 对透明物体进行动态排序
+        std::map<float, glm::vec3> sorted;
+        for (unsigned int i = 0; i < blendPositions.size(); i++)
+        {
+            // 按照距离相机的长度排序透明物体
+            float distance = glm::length(camera.Position - blendPositions[i]);
+            sorted[distance] = blendPositions[i];
+        }
+        // rbegin  从远到近绘制物体
+        for (std::map<float, glm::vec3>::reverse_iterator iterator = sorted.rbegin(); iterator != sorted.rend(); iterator++)
+        {
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, iterator->second);
+            sceneShader.setMat4("model", model);
+            glDrawElements(GL_TRIANGLES, blendGeometry.indices.size(), GL_UNSIGNED_INT, 0);
+        }
 
         // 绘制灯光物体
         // ************************************************************
+
+        float radius = 5.0f;
+        float camX = sin(glfwGetTime() * 0.5) * radius;
+        float camZ = cos(glfwGetTime() * 0.5) * radius;
+        glm::vec3 lightPos = glm::vec3(lightPosition.x * glm::sin(glfwGetTime()) * 2.0, lightPosition.y, lightPosition.z);
+        sceneShader.setVec3("directionLight.direction", lightPos); // 光源位置
+        sceneShader.setVec3("viewPos", camera.Position);
+        pointLightPositions[0].z = camZ;
+        pointLightPositions[0].x = camX;
+        for (unsigned int i = 0; i < 4; i++)
+        {
+            // 设置点光源属性
+            sceneShader.setVec3("pointLights[" + std::to_string(i) + "].position", pointLightPositions[i]);
+            sceneShader.setVec3("pointLights[" + std::to_string(i) + "].ambient", 0.01f, 0.01f, 0.01f);
+            sceneShader.setVec3("pointLights[" + std::to_string(i) + "].diffuse", pointLightColors[i]);
+            sceneShader.setVec3("pointLights[" + std::to_string(i) + "].specular", 1.0f, 1.0f, 1.0f);
+
+            // // 设置衰减
+            sceneShader.setFloat("pointLights[" + std::to_string(i) + "].constant", 1.0f);
+            sceneShader.setFloat("pointLights[" + std::to_string(i) + "].linear", 0.09f);
+            sceneShader.setFloat("pointLights[" + std::to_string(i) + "].quadratic", 0.032f);
+        }
+
         lightObjectShader.use();
         lightObjectShader.setMat4("view", view);
         lightObjectShader.setMat4("projection", projection);
@@ -265,8 +227,8 @@ int main(int argc, char *argv[])
         lightObjectShader.setMat4("model", model);
         lightObjectShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
 
-        glBindVertexArray(sphereGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, sphereGeometry.indices.size(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(pointLightGeometry.VAO);
+        glDrawElements(GL_TRIANGLES, pointLightGeometry.indices.size(), GL_UNSIGNED_INT, 0);
 
         for (unsigned int i = 0; i < 4; i++)
         {
@@ -276,20 +238,18 @@ int main(int argc, char *argv[])
             lightObjectShader.setMat4("model", model);
             lightObjectShader.setVec3("lightColor", pointLightColors[i]);
 
-            glBindVertexArray(sphereGeometry.VAO);
-            glDrawElements(GL_TRIANGLES, sphereGeometry.indices.size(), GL_UNSIGNED_INT, 0);
+            glBindVertexArray(pointLightGeometry.VAO);
+            glDrawElements(GL_TRIANGLES, pointLightGeometry.indices.size(), GL_UNSIGNED_INT, 0);
         }
-        // 渲染 gui
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
     boxGeometry.dispose();
-    planeGeometry.dispose();
-    sphereGeometry.dispose();
+    blendGeometry.dispose();
+    pointLightGeometry.dispose();
+    groundGeometry.dispose();
     glfwTerminate();
 
     return 0;
