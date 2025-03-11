@@ -65,7 +65,9 @@
         "forward_list": "cpp",
         "ratio": "cpp",
         "map": "cpp",
-        "xtree": "cpp"
+        "xtree": "cpp",
+        "set": "cpp",
+        "unordered_set": "cpp"
     },
     "cmake.ignoreCMakeListsMissing": true,
     "C_Cpp.errorSquiggles": "disabled"

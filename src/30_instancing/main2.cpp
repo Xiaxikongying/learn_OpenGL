@@ -30,7 +30,7 @@ float deltaTime = 0.0f;
 float lastTime = 0.0f;
 float lastX = SCREEN_WIDTH / 2.0f; // 鼠标上一帧的位置
 float lastY = SCREEN_HEIGHT / 2.0f;
-Camera camera(glm::vec3(0.0, 0.0, 8.0));
+Camera camera(glm::vec3(0.0, 0.0, 30.0));
 
 int main(int argc, char *argv[])
 {
@@ -66,21 +66,84 @@ int main(int argc, char *argv[])
 
     // 鼠标键盘事件
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    // glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    Shader sceneShader("./shader/scene_vert.glsl", "./shader/scene_frag.glsl");
-    Shader pointShader("./shader/scene_vert.glsl", "./shader/scene_frag.glsl", "./shader/point_geo.glsl");
-    Shader explodeShader("./shader/scene_vert.glsl", "./shader/scene_frag.glsl", "./shader/explode_geo.glsl");
-    Shader normalShader("./shader/normal_vert.glsl", "./shader/normal_frag.glsl", "./shader/normal_geo.glsl");
+    Shader sceneShader("./shader/scene_vert.glsl", "./shader/rock_frag.glsl");
+    Shader instanceShader("./shader/rock_vert.glsl", "./shader/rock_frag.glsl");
 
-    ImVec4 clear_color = ImVec4(25.0 / 255.0, 25.0 / 255.0, 25.0 / 255.0, 1.0); // 25, 25, 25
-    PlaneGeometry planeGeometry(2.0, 2.0, 3, 3);
-    SphereGeometry sphereGeometry(1.0, 20, 20);
-    BoxGeometry boxGeometry(1.0f, 1.0f, 1.0f, 10, 10, 10);
+    BoxGeometry boxGeometry(0.1, 0.1, 0.1);
 
-    float time = 0.0f;
+    glm::vec4 clear_color = glm::vec4(25.0 / 255.0, 25.0 / 255.0, 25.0 / 255.0, 1.0);
+    Model rock("./static/model/rock/rock.obj");
+    Model planet("./static/model/planet/planet.obj");
+
+    // 配置
+    unsigned int amount = 100000; // 小行星数
+    glm::mat4 *modelMatrices;
+    modelMatrices = new glm::mat4[amount];
+    srand(glfwGetTime()); // initialize random seed
+    float radius = 20.0;
+    float offset = 1.5f;
+    for (unsigned int i = 0; i < amount; i++)
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        // 1. translation: displace along circle with 'radius' in range [-offset, offset]
+        float angle = (float)i / (float)amount * 360.0f;
+        float displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
+        float x = sin(angle) * radius + displacement;
+        displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
+        float y = displacement * 0.4f; // keep height of asteroid field smaller compared to width of x and z
+        displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
+        float z = cos(angle) * radius + displacement;
+        model = glm::translate(model, glm::vec3(x, y, z));
+
+        // 2. scale: Scale between 0.05 and 0.25f
+        float scale = (rand() % 20) / 1000.0f + 0.001;
+        model = glm::scale(model, glm::vec3(scale));
+
+        // 3. rotation: add random rotation around a (semi)randomly picked rotation axis vector
+        float rotAngle = (rand() % 360);
+        model = glm::rotate(model, rotAngle, glm::vec3(0.4f, 0.6f, 0.8f));
+
+        // 4. now add to list of matrices
+        modelMatrices[i] = model;
+    }
+
+    // 设置实例化数组
+    unsigned int buffer;
+    glGenBuffers(1, &buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glBufferData(GL_ARRAY_BUFFER, amount * sizeof(glm::mat4), &modelMatrices[0], GL_STATIC_DRAW);
+    for (unsigned int i = 0; i < rock.meshes.size(); i++)
+    {
+        unsigned int VAO = rock.meshes[i].VAO;
+        glBindVertexArray(VAO);
+        // 由于 OpenGL 不支持直接将 mat4 作为顶点属性，所以 mat4需要拆分成4个vec4
+        //(glVertexAttribPointer第二个参数只能是[1,4])
+        // 顶点属性  model是mat4  本质是4个vec4
+        GLsizei vec4Size = sizeof(glm::vec4);
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size, (void *)0);
+
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size, (void *)(vec4Size));
+
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size, (void *)(2 * vec4Size));
+
+        glEnableVertexAttribArray(6);
+        glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size, (void *)(3 * vec4Size));
+
+        glVertexAttribDivisor(3, 1); // 什么时候更新顶点属性的内容至新一组数据  1表示每次都更新
+        glVertexAttribDivisor(4, 1);
+        glVertexAttribDivisor(5, 1);
+        glVertexAttribDivisor(6, 1);
+
+        glBindVertexArray(0);
+    }
+
     while (!glfwWindowShouldClose(window))
     {
         processInput(window);
@@ -106,45 +169,37 @@ int main(int argc, char *argv[])
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
         glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(-3.0f, 0.0f, 0.0f));
-        pointShader.use();
-        pointShader.setMat4("model", model);
-        pointShader.setMat4("view", view);
-        pointShader.setMat4("projection", projection);
-        glBindVertexArray(planeGeometry.VAO);
-        glDrawElements(GL_POINTS, planeGeometry.indices.size(), GL_UNSIGNED_INT, 0);
 
-        explodeShader.use();
-        model = glm::mat4(1.0f);
-        explodeShader.setMat4("model", model);
-        explodeShader.setMat4("view", view);
-        explodeShader.setMat4("projection", projection);
-        time = glfwGetTime();
-        explodeShader.setFloat("time", time);
-        glBindVertexArray(sphereGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, sphereGeometry.indices.size(), GL_UNSIGNED_INT, 0);
-
-        normalShader.use();
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(3.0f, 0.0f, 0.0f));
-        normalShader.setMat4("model", model);
-        normalShader.setMat4("view", view);
-        normalShader.setMat4("projection", projection);
-        glBindVertexArray(boxGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, boxGeometry.indices.size(), GL_UNSIGNED_INT, 0);
-
+        // 大行星，只有一个，正常绘制
         sceneShader.use();
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(3.0f, 0.0f, 0.0f));
-        sceneShader.setMat4("model", model);
-        sceneShader.setMat4("view", view);
         sceneShader.setMat4("projection", projection);
-        glBindVertexArray(boxGeometry.VAO);
-        glDrawElements(GL_TRIANGLES, boxGeometry.indices.size(), GL_UNSIGNED_INT, 0);
+        sceneShader.setMat4("view", view);
+        model = glm::translate(model, glm::vec3(0.0f, -1.0f, 4.0f));
+        model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
+        sceneShader.setMat4("model", model);
+        planet.Draw(sceneShader);
 
+        // for (unsigned int i = 0; i < amount; i++)
+        // {
+        //   sceneShader.setMat4("model", modelMatrices[i]);
+        //   rock.Draw(sceneShader);
+        // }
+
+        // 小行星
+        instanceShader.use();
+        instanceShader.setMat4("projection", projection);
+        instanceShader.setMat4("view", view);
+        instanceShader.setInt("diffuseTexture", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, rock.textures_loaded[0].id);
+        for (unsigned int i = 0; i < rock.meshes.size(); i++) // 使用glDrawElementsInstanced绘制全部模型的所有mesh
+        {
+            glBindVertexArray(rock.meshes[i].VAO);
+            glDrawElementsInstanced(GL_TRIANGLES, rock.meshes[i].indices.size(), GL_UNSIGNED_INT, 0, amount);
+        }
         // 渲染 gui
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
