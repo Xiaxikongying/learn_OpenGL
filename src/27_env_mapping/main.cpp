@@ -15,6 +15,7 @@ using namespace std;
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 unsigned int loadTexture(char const *path);
 void drawSkyBox(Shader shader, BoxGeometry geometry, unsigned int cubeMap);
@@ -65,6 +66,7 @@ int main(int argc, char *argv[])
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     // 2.鼠标事件
     glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
 
     Shader reflectShader("./shader/reflect_object_vert.glsl", "./shader/reflect_object_frag.glsl"); // 反射
     Shader refractShader("./shader/refract_object_vert.glsl", "./shader/refract_object_frag.glsl"); // 折射
@@ -92,6 +94,7 @@ int main(int argc, char *argv[])
 
     unsigned int cubemapTexture = loadCubemap(faces);
     Model ourModel("./static/model/walt/WaltHead.obj");
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     while (!glfwWindowShouldClose(window))
     {
@@ -161,7 +164,10 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
-// 键盘输入监听
+bool isTabPressed = false; // 用来标记Tab键是否按下过
+int last_fov = 0;
+bool isCursorLocked = true;
+/// @brief 按键回调函数
 void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -169,37 +175,78 @@ void processInput(GLFWwindow *window)
         glfwSetWindowShouldClose(window, true);
     }
 
-    // 相机按键控制
-    // 相机移动
+    if (glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS)
+    {
+        // ALT 按下：显示鼠标
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        isCursorLocked = false;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_RELEASE && !isCursorLocked)
+    {
+        // ALT 松开：隐藏鼠标
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        isCursorLocked = true;
+    }
+
+    Camera_Movement key = NONE;
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+    {
+        key = ACCELERATE;
+    }
+
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
     {
-        camera.ProcessKeyboard(FORWARD, deltaTime);
+        camera.ProcessKeyboard(key | FORWARD, deltaTime);
     }
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
     {
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
+        camera.ProcessKeyboard(key | BACKWARD, deltaTime);
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
     {
-        camera.ProcessKeyboard(LEFT, deltaTime);
+        camera.ProcessKeyboard(key | LEFT, deltaTime);
     }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
     {
-        camera.ProcessKeyboard(RIGHT, deltaTime);
+        camera.ProcessKeyboard(key | RIGHT, deltaTime);
+    }
+
+    // 放大视角
+    if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS && !isTabPressed)
+    {
+        last_fov = camera.Zoom;
+        camera.Zoom = 10.0f;
+        isTabPressed = true; // 标记 Tab 键已按下
+    }
+    if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_RELEASE && isTabPressed)
+    {
+        camera.Zoom = last_fov;
+        isTabPressed = false; // 标记 Tab 键已抬起
     }
 }
 
-// 鼠标移动监听
+/// @brief 鼠标移动回调函数
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
+    if (isCursorLocked)
+    {
+        float xoffset = xpos - lastX;
+        float yoffset = lastY - ypos;
+        lastX = xpos;
+        lastY = ypos;
+        camera.ProcessMouseMovement(xoffset, yoffset);
+    }
+}
 
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
-
-    lastX = xpos;
-    lastY = ypos;
-
-    camera.ProcessMouseMovement(xoffset, yoffset);
+/// @brief 鼠标滚轮回调函数
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
+{
+    camera.Zoom -= (float)yoffset;
+    if (camera.Zoom < 1.0f)
+        camera.Zoom = 1.0f;
+    if (camera.Zoom > 60.0f)
+        camera.Zoom = 60.0f;
+    return;
 }
 
 // 加载纹理贴图
