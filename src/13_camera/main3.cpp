@@ -262,14 +262,13 @@ void processInput(GLFWwindow *window)
 /// @brief 鼠标移动回调函数
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+    lastX = xpos;
+    lastY = ypos;
     if (isCursorLocked)
-    {
-        float xoffset = xpos - lastX;
-        float yoffset = lastY - ypos;
-        lastX = xpos;
-        lastY = ypos;
         camera.ProcessMouseMovement(xoffset, yoffset);
-    }
 }
 
 /// @brief 鼠标滚轮回调函数
