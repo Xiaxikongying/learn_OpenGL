@@ -23,6 +23,7 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 // method
 void drawMesh(BufferGeometry geometry);
 void drawLightObject(Shader shader, BufferGeometry geometry, glm::vec3 position);
+void RenderQuad();
 
 std::string Shader::dirName;
 
@@ -80,61 +81,19 @@ int main(int argc, char *argv[])
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    Shader sceneShader("./shader/shadow_scene_vert.glsl", "./shader/shadow_scene_frag.glsl");
-    Shader depthMapShader("./shader/depth_map_vert.glsl", "./shader/depth_map_frag.glsl", "./shader/depth_map_geo.glsl");
+    Shader sceneShader("./shader/scene_vert.glsl", "./shader/scene_frag.glsl");
     Shader lightObjectShader("./shader/light_object_vert.glsl", "./shader/light_object_frag.glsl");
 
-    PlaneGeometry groundGeometry(10.0, 10.0);            // 地面
-    PlaneGeometry quadGeometry(6.0, 6.0);                // 测试面板
-    BoxGeometry boxGeometry(1.0, 1.0, 1.0);              // 箱子
-    BoxGeometry floorGeometry(10.0, 0.0001, 10.0);       // 箱子
     SphereGeometry pointLightGeometry(0.06, 10.0, 10.0); // 点光源位置显示
+    PlaneGeometry planeGeometry(1.0, 1.0);
 
-    unsigned int woodMap = loadTexture("./static/texture/wood.png");           // 地面
-    unsigned int brickMap = loadTexture("./static/texture/brick_diffuse.jpg"); // 砖墙
-
-    float factor = 0.0;
-
-    // ------------------------------------------------
-    unsigned int depthMapFBO;
-    glGenFramebuffers(1, &depthMapFBO);
-
-    // 创建一个立方体贴图
-    unsigned int depthCubemap;
-    glGenTextures(1, &depthCubemap);
-    const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
-    glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap);
-    for (unsigned int i = 0; i < 6; ++i)
-    {
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-    // 将立方体贴图 设置为帧缓冲的--->GL_DEPTH_ATTACHMENT（深度缓冲）
-    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthCubemap, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    // ------------------------------------------------
-
-    // 定义不同的箱子位置
-    vector<glm::vec3> cubePositions{
-        glm::vec3(2.3f, -2.0f, -1.0),
-        glm::vec3(2.0f, 2.3f, 1.0),
-        glm::vec3(-2.5f, -1.0f, 0.0),
-        glm::vec3(-1.5f, 1.0f, 1.5),
-        glm::vec3(-1.5f, 2.0f, -2.5)};
-
+    unsigned int brickDiffuseMap = loadTexture("./static/texture/brickwall.jpg");       // 砖墙
+    unsigned int brickNormalMap = loadTexture("./static/texture/brickwall_normal.jpg"); // 法线砖墙
     sceneShader.use();
-    sceneShader.setInt("diffuseTexture", 0); // 物体贴图
-    sceneShader.setInt("depthMap", 1);       // 阴影贴图
+    sceneShader.setInt("diffuseMap", 0);
+    sceneShader.setInt("normalMap", 1);
+    glm::vec3 lightPosition = glm::vec3(-2.0f, 2.0f, 2.0f); // 光照位置
 
-    glm::vec3 lightPosition = glm::vec3(-2.0f, 0.0f, 0.0f); // 光照位置
     while (!glfwWindowShouldClose(window))
     {
         processInput(window);
@@ -157,123 +116,33 @@ int main(int argc, char *argv[])
         }
         // 渲染指令
         // ...
-        glClearColor(25.0 / 255.0, 25.0 / 255.0, 25.0 / 255.0, 1.0);
+        glClearColor(0.2, 0.3, 0.5, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         // 光源移动
         lightPosition = glm::vec3(lightPosition.x + glm::sin(glfwGetTime()) * 0.03, lightPosition.y, lightPosition.z);
+        // mvp矩阵
         glm::mat4 model = glm::mat4(1.0f);
-
-        // 渲染深度贴图
-        float aspect = (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT;
-        float near = 1.0f;
-        float far = 25.0f;
-        glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), aspect, near, far);
-
-        // 光源的透视投影矩阵  六个面
-        std::vector<glm::mat4> shadowTransforms;
-        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPosition, lightPosition + glm::vec3(1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
-        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPosition, lightPosition + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
-        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPosition, lightPosition + glm::vec3(0.0, 1.0, 0.0), glm::vec3(0.0, 0.0, 1.0)));
-        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPosition, lightPosition + glm::vec3(0.0, -1.0, 0.0), glm::vec3(0.0, 0.0, -1.0)));
-        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPosition, lightPosition + glm::vec3(0.0, 0.0, 1.0), glm::vec3(0.0, -1.0, 0.0)));
-        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPosition, lightPosition + glm::vec3(0.0, 0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
-
-        // 渲染深度贴图
-        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-        glClear(GL_DEPTH_BUFFER_BIT);
-        depthMapShader.use();
-        for (unsigned int i = 0; i < 6; ++i)
-        {
-            // 设置六个面的透视矩阵
-            depthMapShader.setMat4("shadowMatrices[" + std::to_string(i) + "]", shadowTransforms[i]);
-        }
-        // far_plane  lightPos  用于计算物体的深度值
-        depthMapShader.setFloat("far_plane", far);
-        depthMapShader.setVec3("lightPos", lightPosition);
-        // 绘制大箱子阴影
-        model = glm::scale(model, glm::vec3(10, 10, 10));
-        depthMapShader.setMat4("model", model);
-        drawMesh(boxGeometry);
-
-        // 绘制多个箱子的阴影
-        for (unsigned int i = 0; i < cubePositions.size(); i++)
-        {
-            model = glm::mat4(1.0f);
-            model = glm::translate(model, cubePositions[i]);
-            float angle = 10.0f * i;
-            model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-
-            depthMapShader.setMat4("model", model);
-            drawMesh(boxGeometry);
-        }
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        // 开始绘制物体
-        glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
         sceneShader.use();
-        sceneShader.setMat4("projection", projection);
-        sceneShader.setMat4("view", view);
-
-        sceneShader.setVec3("lightPos", lightPosition); // 光源位置
-        sceneShader.setVec3("viewPos", camera.Position);
-
-        sceneShader.setFloat("far_plane", far);
-        sceneShader.setFloat("uvScale", 4.0f);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, woodMap);
-
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap); // 使用深度贴图
-
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0, 0.0, 0.0));
-        model = glm::scale(model, glm::vec3(7, 7, 7));
-
-        // 绘制大箱子
+        model = glm::scale(model, glm::vec3(5, 5, 5));
+        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0, 0.0, 0.0));
         sceneShader.setMat4("model", model);
+        sceneShader.setMat4("view", view);
+        sceneShader.setMat4("projection", projection);
+
+        sceneShader.setVec3("viewPos", camera.Position);
+        sceneShader.setVec3("lightPos", lightPosition); // 光源位置
         sceneShader.setFloat("uvScale", 1.0f);
-        sceneShader.setInt("reverse_normal", -1);
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_FRONT);
-        drawMesh(boxGeometry);
-        glDisable(GL_CULL_FACE);
-
+        sceneShader.setFloat("strength", 0.01); // 环境光强度
+        // 绘制墙面
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, brickMap);
-        // 绘制多个小箱子
-        for (unsigned int i = 0; i < cubePositions.size(); i++)
-        {
-            model = glm::mat4(1.0f);
-            model = glm::translate(model, cubePositions[i]);
-            float angle = 10.0f * i;
-            model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+        glBindTexture(GL_TEXTURE_2D, brickDiffuseMap);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, brickNormalMap);
+        RenderQuad();
 
-            sceneShader.setMat4("model", model);
-            sceneShader.setInt("reverse_normal", 1);
-            drawMesh(boxGeometry);
-        }
-
-        // 显示深度贴图
-        // *************************************************
-        // quadShader.use();
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, depthMap);
-        // quadShader.setMat4("view", view);
-
-        // model = glm::mat4(1.0f);
-        // quadShader.setFloat("near_plane", near_plane);
-        // quadShader.setFloat("far_plane", far_plane);
-        // quadShader.setMat4("model", model);
-        // quadShader.setMat4("projection", projection);
-        // drawMesh(quadGeometry);
-        // *************************************************
         // 绘制光源
         drawLightObject(lightObjectShader, pointLightGeometry, lightPosition);
 
@@ -284,8 +153,6 @@ int main(int argc, char *argv[])
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-
-    groundGeometry.dispose();
     pointLightGeometry.dispose();
     glfwTerminate();
 
@@ -511,4 +378,95 @@ void drawSkyBox(Shader shader, BoxGeometry geometry, unsigned int cubeMap)
     glDepthFunc(GL_LESS);
     glEnable(GL_DEPTH_TEST);
     view = camera.GetViewMatrix();
+}
+
+unsigned int quadVAO = 0;
+unsigned int quadVBO;
+void RenderQuad()
+{
+    if (quadVAO == 0)
+    {
+        // 平面的四个顶点
+        glm::vec3 pos1(-1.0, 1.0, 0.0);
+        glm::vec3 pos2(-1.0, -1.0, 0.0);
+        glm::vec3 pos3(1.0, -1.0, 0.0);
+        glm::vec3 pos4(1.0, 1.0, 0.0);
+
+        // 四个顶点的纹理坐标
+        glm::vec2 uv1(0.0, 1.0);
+        glm::vec2 uv2(0.0, 0.0);
+        glm::vec2 uv3(1.0, 0.0);
+        glm::vec2 uv4(1.0, 1.0);
+
+        // 法线向量
+        glm::vec3 nm(0.0, 0.0, 1.0);
+
+        // 计算切线向量（Tangent）和副切线向量（Bitangent）
+        glm::vec3 tangent1, bitangent1;
+        glm::vec3 tangent2, bitangent2;
+        // - triangle 1
+        glm::vec3 edge1 = pos2 - pos1; // 边1向量
+        glm::vec3 edge2 = pos3 - pos1; // 边2向量
+        glm::vec2 deltaUV1 = uv2 - uv1;
+        glm::vec2 deltaUV2 = uv3 - uv1;
+
+        float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+
+        tangent1.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
+        tangent1.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
+        tangent1.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+        tangent1 = glm::normalize(tangent1);
+
+        bitangent1.x = f * (-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x);
+        bitangent1.y = f * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
+        bitangent1.z = f * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
+        bitangent1 = glm::normalize(bitangent1);
+
+        // - triangle 2
+        edge1 = pos3 - pos1;
+        edge2 = pos4 - pos1;
+        deltaUV1 = uv3 - uv1;
+        deltaUV2 = uv4 - uv1;
+
+        f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+
+        tangent2.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
+        tangent2.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
+        tangent2.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+        tangent2 = glm::normalize(tangent2);
+
+        bitangent2.x = f * (-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x);
+        bitangent2.y = f * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
+        bitangent2.z = f * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
+        bitangent2 = glm::normalize(bitangent2);
+
+        float quadVertices[] = {
+            // Positions            // normal         // TexCoords  // Tangent                          // Bitangent
+            pos1.x, pos1.y, pos1.z, nm.x, nm.y, nm.z, uv1.x, uv1.y, tangent1.x, tangent1.y, tangent1.z, bitangent1.x, bitangent1.y, bitangent1.z,
+            pos2.x, pos2.y, pos2.z, nm.x, nm.y, nm.z, uv2.x, uv2.y, tangent1.x, tangent1.y, tangent1.z, bitangent1.x, bitangent1.y, bitangent1.z,
+            pos3.x, pos3.y, pos3.z, nm.x, nm.y, nm.z, uv3.x, uv3.y, tangent1.x, tangent1.y, tangent1.z, bitangent1.x, bitangent1.y, bitangent1.z,
+
+            pos1.x, pos1.y, pos1.z, nm.x, nm.y, nm.z, uv1.x, uv1.y, tangent2.x, tangent2.y, tangent2.z, bitangent2.x, bitangent2.y, bitangent2.z,
+            pos3.x, pos3.y, pos3.z, nm.x, nm.y, nm.z, uv3.x, uv3.y, tangent2.x, tangent2.y, tangent2.z, bitangent2.x, bitangent2.y, bitangent2.z,
+            pos4.x, pos4.y, pos4.z, nm.x, nm.y, nm.z, uv4.x, uv4.y, tangent2.x, tangent2.y, tangent2.z, bitangent2.x, bitangent2.y, bitangent2.z};
+        // Setup plane VAO
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (GLvoid *)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (GLvoid *)(3 * sizeof(GLfloat)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (GLvoid *)(6 * sizeof(GLfloat)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (GLvoid *)(8 * sizeof(GLfloat)));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (GLvoid *)(11 * sizeof(GLfloat)));
+    }
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
 }
