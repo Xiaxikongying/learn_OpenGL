@@ -50,7 +50,11 @@ uniform sampler2D Texture; // 贴图
 in vec2 outTexCoord;
 in vec3 outNormal;
 in vec3 outFragPos;
+
 uniform vec3 viewPos;
+uniform float factor; // 变化值
+
+uniform float stenci; // 绘制边框颜色
 
 float near = 0.1;
 float far = 100.0;
