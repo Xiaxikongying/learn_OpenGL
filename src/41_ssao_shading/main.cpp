@@ -79,12 +79,11 @@ int main(int argc, char *argv[])
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    Shader gbufferShader("./shader/ssao_geometry_vert.glsl", "./shader/ssao_geometry_frag.glsl");
-    Shader finalShader("./shader/ssao_vert.glsl", "./shader/ssao_lighting_frag.glsl");
-    Shader ssaoShader("./shader/ssao_vert.glsl", "./shader/ssao_lighting_frag.glsl");
-    Shader ssaoBlurShader("./shader/ssao_vert.glsl", "./shader/ssao_frag.glsl");
-
-    Shader lightObjShader("./shader/light_object_vert.glsl", "./shader/light_object_frag.glsl");
+    Shader gbufferShader("./shader/ssao_geometry_vert.glsl", "./shader/ssao_geometry_frag.glsl"); // 提取物体信息
+    Shader ssaoShader("./shader/ssao_vert.glsl", "./shader/ssao_frag.glsl");                      // 生成ssao贴图
+    Shader ssaoBlurShader("./shader/ssao_vert.glsl", "./shader/ssao_blur_frag.glsl");             // 将ssao贴图模糊
+    Shader finalShader("./shader/ssao_vert.glsl", "./shader/ssao_lighting_frag.glsl");            // 用于最终的渲染
+    Shader lightObjShader("./shader/light_object_vert.glsl", "./shader/light_object_frag.glsl");  // 绘制光源
 
     BoxGeometry boxGeometry(1.0, 1.0, 1.0);              // 盒子
     SphereGeometry pointLightGeometry(0.07, 20.0, 20.0); // 点光源位置显示
@@ -142,6 +141,7 @@ int main(int argc, char *argv[])
     glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO); // 绑定ssao帧缓冲
 
     // 为上面两个帧缓冲创建颜色缓存
+    // ssao颜色缓存
     unsigned int ssaoColorBuffer;
     glGenTextures(1, &ssaoColorBuffer);
     glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
@@ -171,9 +171,12 @@ int main(int argc, char *argv[])
     vector<glm::vec3> ssaoKernel;
     for (unsigned int i = 0; i < 64; i++)
     {
-        glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, randomFloats(generator));
-        sample = glm::normalize(sample);
-        sample *= randomFloats(generator);
+        glm::vec3 sample(
+            randomFloats(generator) * 2.0 - 1.0, //[-1,1]
+            randomFloats(generator) * 2.0 - 1.0, //[-1,1]
+            randomFloats(generator));            //[0,1] 表示采用半球采样
+        sample = glm::normalize(sample);         // 归一化 使得点全部落到半球面上
+        sample *= randomFloats(generator);       //*[0,1] 让采样点靠近球心
         float scale = float(i) / 64.0;
 
         // 将核心样本靠近原点分布，使用加速插值函数
@@ -182,12 +185,15 @@ int main(int argc, char *argv[])
         ssaoKernel.push_back(sample);
     }
 
-    // 生成噪声纹理
+    // 生成噪声纹理    用于扰动TBN（切线-副切线-法线）坐标系，增加计算的随机性
     vector<glm::vec3> ssaoNoise;
     for (unsigned int i = 0; i < 16; i++)
     {
         // 在切线空间中，绕z轴旋转
-        glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f);
+        glm::vec3 noise(
+            randomFloats(generator) * 2.0 - 1.0, //[-1,1]
+            randomFloats(generator) * 2.0 - 1.0, //[-1,1]
+            0.0f);
         ssaoNoise.push_back(noise);
     }
 
@@ -218,20 +224,27 @@ int main(int argc, char *argv[])
     ssaoShader.setInt("gPosition", 0);
     ssaoShader.setInt("gNormal", 1);
     ssaoShader.setInt("texNoise", 2);
+    // 存入采样点
+    for (unsigned int i = 0; i < 64; ++i)
+        ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
 
     ssaoBlurShader.use();
-    ssaoBlurShader.setInt("ssapInput", 0);
+    ssaoBlurShader.setInt("ssaoInput", 0);
 
     Model modelObject("./static/model/teapot/teapot.obj");
 
     while (!glfwWindowShouldClose(window))
     {
         processInput(window);
+        int fps_value = (int)round(ImGui::GetIO().Framerate);
+        int ms_value = (int)round(1000.0f / ImGui::GetIO().Framerate);
+        std::string FPS = std::to_string(fps_value);
+        std::string ms = std::to_string(ms_value);
+        std::string newTitle = "LearnOpenGL - " + ms + " ms/frame " + FPS;
+        glfwSetWindowTitle(window, newTitle.c_str());
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ImGui::Begin("press alt");
-        ImGui::End();
 
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastTime;
@@ -246,15 +259,16 @@ int main(int argc, char *argv[])
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
+        // 使用gbufferShader 将所有物体的信息写入gBuffer中
         gbufferShader.use();
         gbufferShader.setMat4("projection", projection);
         gbufferShader.setMat4("view", view);
         // 绘制大箱子
         model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0, 4.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(15.0f, 10.0F, 15.0F));
+        model = glm::translate(model, glm::vec3(0.0, 9.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(20.0f, 20.0F, 20.0F));
         gbufferShader.setMat4("model", model);
-        gbufferShader.setInt("invertedNormals", 1); // 在立方体内反转法线
+        gbufferShader.setInt("invertedNormals", 1); // 在大箱子内反转法线
         glCullFace(GL_FRONT);
         drawMesh(boxGeometry);
         gbufferShader.setInt("invertedNormals", 0);
@@ -275,13 +289,12 @@ int main(int argc, char *argv[])
         modelObject.Draw(gbufferShader);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        // 2. 生成SSAO 贴图
+        // 2. 生成SSAO贴图  写入ssaoFBO中
         glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
         glClear(GL_COLOR_BUFFER_BIT);
         ssaoShader.use();
-        for (unsigned int i = 0; i < 64; ++i)
-            ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
         ssaoShader.setMat4("projection", projection);
+        // 使用gbuffer中的位置、法线、
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gPosition);
         glActiveTexture(GL_TEXTURE1);
@@ -296,12 +309,12 @@ int main(int argc, char *argv[])
         glClear(GL_COLOR_BUFFER_BIT);
         ssaoBlurShader.use();
         glActiveTexture(GL_TEXTURE0);
+        // 使用ssao生成的贴图
         glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
-        drawMesh(quadGeometry);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        drawMesh(quadGeometry);               // 将模糊后的ssao贴图绘制到ssaoBlurFBO中
+        glBindFramebuffer(GL_FRAMEBUFFER, 0); // 解绑，使用默认的帧缓冲
 
-        // 4. lighting pass: traditional deferred Blinn-Phong lighting with added screen-space ambient occlusion
-        // -----------------------------------------------------------------------------------------------------
+        // 使用ssao贴图来绘制物体
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         finalShader.use();
         float radius = 5.0f;
@@ -309,43 +322,39 @@ int main(int argc, char *argv[])
         float camZ = cos(glfwGetTime() * 0.5) * radius;
         lightPos.x = camX;
         lightPos.z = camZ;
-        // send light relevant uniforms
+        const float linear = 0.09;
+        const float quadratic = 0.032;
+        // 在延迟渲染中，光照计算是在视图空间进行的，而不是世界空间。
         glm::vec3 lightPosView = glm::vec3(camera.GetViewMatrix() * glm::vec4(lightPos, 1.0));
         finalShader.setVec3("light.Position", lightPosView);
         finalShader.setVec3("light.Color", lightColor);
-        // Update attenuation parameters
-        const float linear = 0.09;
-        const float quadratic = 0.032;
         finalShader.setFloat("light.Linear", linear);
         finalShader.setFloat("light.Quadratic", quadratic);
+
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, gPosition);
+        glBindTexture(GL_TEXTURE_2D, gPosition); // 位置
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, gNormal);
+        glBindTexture(GL_TEXTURE_2D, gNormal); // 法线
         glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, gColorSpec);
-        glActiveTexture(GL_TEXTURE3); // add extra SSAO texture to lighting pass
-        glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBler);
+        glBindTexture(GL_TEXTURE_2D, gColorSpec); // 颜色
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBler); // ssao
         drawMesh(quadGeometry);
 
-        // 绘制灯光物体
-        // 延迟结合正向渲染
+        // 绘制灯光物体  延迟结合正向渲染
         glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // 指定默认的帧缓冲为写缓冲
-        // 复制gbuffer的深度信息到默认帧缓冲的深度缓冲
+        // 提前将前面绘制的物体的深度信息写入   复制gbuffer的深度信息到默认帧缓冲的深度缓冲
         glBlitFramebuffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         lightObjShader.use();
         lightObjShader.setMat4("view", view);
         lightObjShader.setMat4("projection", projection);
-
         model = glm::mat4(1.0f);
         model = glm::translate(model, lightPos);
-
         lightObjShader.setMat4("model", model);
         lightObjShader.setVec3("lightColor", lightColor);
-
         drawMesh(pointLightGeometry);
 
         // 开始渲染imgui  写在图形后面，才不会被图形遮挡

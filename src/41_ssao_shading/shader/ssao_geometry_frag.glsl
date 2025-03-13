@@ -7,7 +7,8 @@ in vec3 FragPos;
 in vec2 TexCoords;
 in vec3 Normal;
 
-void main() {
+void main() 
+{
   // 将片段位置向量存储在第一个gbuffer纹理中
   aPosition = FragPos;
   // 将每个片段法线存储到gbuffer中
