@@ -24,7 +24,7 @@ uniform bool blinn;
 
 void main() 
 {
-    vec3 color = texture(woodMap, outTexCoord).rgb;
+    vec3 color = texture(woodMap, outTexCoord).rgb; //物体颜色
     vec3 viewDir = normalize(viewPos - outFragPos); //观察向量
     vec3 normal = normalize(outNormal); //法线
     vec3 lightDir = normalize(light.position - outFragPos);//光线向量
