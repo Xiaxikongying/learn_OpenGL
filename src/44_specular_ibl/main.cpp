@@ -83,9 +83,14 @@ int main(int argc, char *argv[])
     Shader envmapShader("./shader/envmap_vert.glsl", "./shader/envmap_frag.glsl");               // 绘制天空盒
     Shader irradianceShader("./shader/irradiance_vert.glsl", "./shader/irradiance_frag.glsl");   // 将天空盒贴图转换为光照强度贴图
 
+    Shader prefilterShader("./shader/prefilter_vert.glsl", "./shader/prefilter_frag.glsl"); // 用于绘制不同级别mipmap
+    Shader brdfShader("./shader/brdf_vert.glsl", "./shader/brdf_frag.glsl");                // 预计算brdf
+    Shader testBrdfShader("./shader/test_brdf_vert.glsl", "./shader/test_brdf_frag.glsl");  // 绘制brdf贴图（测试使用）
+
     SphereGeometry pointLightGeometry(0.17, 64.0, 64.0); // 点光源位置显示
     SphereGeometry objectGeometry(1.0, 64.0, 64.0);      // 圆球
     BoxGeometry boxGeometry(5.0, 5.0, 5.0);
+    PlaneGeometry quadGeometry(2.0, 2.0); // 屏幕四边形
 
     glm::vec4 clear_color = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f); // 背景颜色
 
@@ -112,12 +117,15 @@ int main(int argc, char *argv[])
 
     sceneShader.use();
     sceneShader.setInt("irradianceMap", 0);
+    sceneShader.setInt("prefilterMap", 1);
+    sceneShader.setInt("brdfLUT", 2);
     sceneShader.setVec3("albedo", 0.0f, 0.5f, 0.0f); // 反射率
     sceneShader.setFloat("ao", 1.0f);                // 环境光遮蔽
 
     envmapShader.use();
     envmapShader.setInt("envMap", 0);
 
+    //----diffuse_ibl--------
     // 生成一个帧缓冲captureFBO
     unsigned int captureFBO;
     glGenFramebuffers(1, &captureFBO);
@@ -213,11 +221,80 @@ int main(int argc, char *argv[])
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0); // 使用默认的帧缓冲
 
+    //----specular_ibl--------
+    // 创建预过滤立方体贴图
+    unsigned int prefilterMap;
+    glGenTextures(1, &prefilterMap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        // 生成每面为128*128的立方体贴图
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 128, 128, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP); // 自动为每个面生成完整的mipmap级别
+    // 使用蒙特卡洛积分创建预过滤器
+    prefilterShader.use();
+    prefilterShader.setInt("environmentMap", 0);
+    prefilterShader.setMat4("projection", captureProjection);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap); // hdr转化的立方体贴图
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);  // 使用captureFBO帧缓冲
+
+    // 手动渲染mipmap级别
+    // 物体表面的粗糙度不同，对应的反射模糊程度也不同。使用需要根据物体不同的粗糙度使用不同的mipmap级别的反射贴图
+    unsigned int maxMipLevels = 5;
+    for (unsigned int mip = 0; mip < maxMipLevels; ++mip)
+    {
+        // 根据mip级别大小调整帧缓冲区大小
+        unsigned int mipWidth = 128 * std::pow(0.5, mip);
+        unsigned int mipHeight = 128 * std::pow(0.5, mip);
+        glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
+        glViewport(0, 0, mipWidth, mipHeight);
+
+        float roughness = (float)mip / (float)(maxMipLevels - 1);
+        prefilterShader.setFloat("roughness", roughness); // 根据mipmap设置不同的粗造度
+        for (unsigned int i = 0; i < 6; ++i)
+        {
+            prefilterShader.setMat4("view", captureViews[i]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, prefilterMap, mip); // mip表示mipmap级别
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            drawMesh(boxGeometry);
+        }
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // 预计算BRDF
+    unsigned int brdfLUTTexture;
+    glGenTextures(1, &brdfLUTTexture); // 创建brdfLUTTexture颜色缓存
+    glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, 512, 512, 0, GL_RG, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);   // 重新获取并配置帧缓冲对象，并使用BRDF着色器渲染屏幕四边形
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO); // 使用深度缓存captureRBO
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+    // 绑定颜色缓存
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdfLUTTexture, 0);
+
+    glViewport(0, 0, 512, 512);
+    brdfShader.use();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    drawMesh(quadGeometry); // 渲染屏幕四边形
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     // 恢复原来的窗口渲染尺寸
     int scrWidth, scrHeight;
     glfwGetFramebufferSize(window, &scrWidth, &scrHeight); // 获取窗口大小
     glViewport(0, 0, scrWidth, scrHeight);
-
     while (!glfwWindowShouldClose(window))
     {
         processInput(window);
@@ -250,6 +327,11 @@ int main(int argc, char *argv[])
         sceneShader.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap); // 使用光照强度贴图
+        // 绑定预处理贴图和brdf贴图
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap); // 有mipmap的光照贴图
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, brdfLUTTexture); // 预计算BRDF贴图
 
         float radius = 5.0f;
         float camX = sin(glfwGetTime() * 0.5) * radius;
@@ -287,17 +369,23 @@ int main(int argc, char *argv[])
         // drawMesh(boxGeometry); // 绘制hdr立方体  (测试使用)
 
         // 使用处理之后的环境贴图
-
         envmapShader.use();
         envmapShader.setMat4("view", view);
         envmapShader.setMat4("projection", projection);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap); // 显示hdr转化的立方体贴图（即天空盒）
-        // glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap); // 显示生成的光照贴图（天空盒生成的）
+        //  glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap); // 显示生成的光照贴图（天空盒生成的）
+        // glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap); // 显示生成的预过滤图
         drawMesh(boxGeometry); // 绘制天空盒
 
-        // 绘制灯光物体
+        // 测试预计算 BRDF 纹理
+        // testBrdfShader.use();
+        // testBrdfShader.setInt("brdfTexture", 0);
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);// 预计算BRDF贴图
+        // drawMesh(quadGeometry);
 
+        // 绘制灯光物体
         lightObjShader.use();
         lightObjShader.setMat4("view", view);
         lightObjShader.setMat4("projection", projection);
